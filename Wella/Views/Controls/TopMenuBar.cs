@@ -48,7 +48,8 @@ public class TopMenuBar : Panel
         SetStyle(ControlStyles.OptimizedDoubleBuffer |
                  ControlStyles.AllPaintingInWmPaint  |
                  ControlStyles.UserPaint, true);
-        BackColor = BgColor;
+        ResizeRedraw = true;
+        BackColor    = BgColor;
     }
 
     public void SetActiveTool(ToolType tool) { _activeTool = tool; Invalidate(); }

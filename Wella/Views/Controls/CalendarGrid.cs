@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using Wella.Models;
+using Wella.Services;
 
 namespace Wella.Views.Controls;
 
@@ -33,10 +34,20 @@ public class CalendarGrid : Control
     private static readonly Color DotColor   = Color.FromArgb(26, 188, 156);
 
     // ── GDI 캐시 ─────────────────────────────────────────────────────────
-    private readonly Font _headFont  = new("Segoe UI",  9f, FontStyle.Bold);
-    private readonly Font _dayFont   = new("Segoe UI", 10f, FontStyle.Regular);
-    private readonly Font _todayFont = new("Segoe UI", 10f, FontStyle.Bold);
-    private readonly Pen  _cellPen   = new(CellBorder, 1);
+    private readonly Font       _headFont    = new("Segoe UI",  9f, FontStyle.Bold);
+    private readonly Font       _dayFont     = new("Segoe UI", 10f, FontStyle.Regular);
+    private readonly Font       _todayFont   = new("Segoe UI", 10f, FontStyle.Bold);
+    private readonly Font       _holidayFont = new("Segoe UI",  7.5f, FontStyle.Regular);
+    private readonly Pen        _cellPen     = new(CellBorder, 1);
+    private readonly Pen        _selPen      = new(SelBorder, 2);
+    private readonly SolidBrush _sunBrush    = new(SunColor);
+    private readonly SolidBrush _satBrush    = new(SatColor);
+    private readonly SolidBrush _normalBrush = new(NormalClr);
+    private readonly SolidBrush _dimBrush    = new(DimColor);
+    private readonly SolidBrush _todayBgBrush = new(TodayBg);
+    private readonly SolidBrush _whiteBrush  = new(Color.White);
+    private readonly SolidBrush _dotBrush    = new(DotColor);
+    private readonly SolidBrush _selBgBrush  = new(SelBg);
 
     private const int HeaderH = 32;
 
@@ -152,45 +163,47 @@ public class CalendarGrid : Control
 
         // 선택 배경
         if (isSel && !isToday)
-        {
-            using var sb = new SolidBrush(SelBg);
-            g.FillRectangle(sb, r);
-        }
+            g.FillRectangle(_selBgBrush, r);
 
         // 셀 테두리
         g.DrawRectangle(_cellPen, r);
 
         // 선택 테두리
         if (isSel)
-        {
-            using var sp = new Pen(SelBorder, 2);
-            g.DrawRectangle(sp, r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2);
-        }
+            g.DrawRectangle(_selPen, r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2);
 
         // 날짜 숫자
-        string txt = date.Day.ToString();
-        Color fg = !isCurMonth ? DimColor
-                  : col == 0  ? SunColor
-                  : col == 6  ? SatColor
-                  : NormalClr;
+        string  txt     = date.Day.ToString();
+        string? holiday = isCurMonth ? KoreanHolidays.GetName(date) : null;
+        bool    isHoliday = holiday != null;
+
+        SolidBrush fg = !isCurMonth          ? _dimBrush
+                      : isHoliday || col == 0 ? _sunBrush
+                      : col == 6             ? _satBrush
+                      : _normalBrush;
 
         if (isToday)
         {
-            int   sz  = 26;
-            float cx  = r.X + sz / 2f + 6;
-            float cy  = r.Y + 5;
-            using var tBg = new SolidBrush(TodayBg);
-            g.FillEllipse(tBg, cx - sz / 2f, cy, sz, sz);
+            int   sz = 26;
+            float cx = r.X + sz / 2f + 6;
+            float cy = r.Y + 5;
+            g.FillEllipse(_todayBgBrush, cx - sz / 2f, cy, sz, sz);
             var tsz = g.MeasureString(txt, _todayFont);
-            using var tw = new SolidBrush(Color.White);
-            g.DrawString(txt, _todayFont, tw,
+            g.DrawString(txt, _todayFont, _whiteBrush,
                 cx - tsz.Width / 2f + 1,
                 cy + (sz - tsz.Height) / 2f);
+
+            // 오늘이 공휴일이면 이름을 원 아래에 표시
+            if (isHoliday)
+                g.DrawString(holiday, _holidayFont, _sunBrush, new PointF(r.X + 5f, r.Y + 34f));
         }
         else
         {
-            using var fb = new SolidBrush(fg);
-            g.DrawString(txt, _dayFont, fb, new PointF(r.X + 6f, r.Y + 6f));
+            g.DrawString(txt, _dayFont, fg, new PointF(r.X + 6f, r.Y + 6f));
+
+            // 공휴일 이름을 날짜 숫자 아래에 표시
+            if (isHoliday)
+                g.DrawString(holiday, _holidayFont, _sunBrush, new PointF(r.X + 5f, r.Y + 22f));
         }
 
         // 이벤트 점
@@ -203,9 +216,8 @@ public class CalendarGrid : Control
             int totalW = dots * dotSz + (dots - 1) * gap;
             int sx     = r.X + (r.Width - totalW) / 2;
             int dy     = r.Bottom - dotSz - 5;
-            using var db = new SolidBrush(DotColor);
             for (int d = 0; d < dots; d++)
-                g.FillEllipse(db, sx + d * (dotSz + gap), dy, dotSz, dotSz);
+                g.FillEllipse(_dotBrush, sx + d * (dotSz + gap), dy, dotSz, dotSz);
         }
     }
 
@@ -231,8 +243,14 @@ public class CalendarGrid : Control
     {
         if (disposing)
         {
-            _headFont.Dispose(); _dayFont.Dispose();
-            _todayFont.Dispose(); _cellPen.Dispose();
+            _headFont.Dispose();    _dayFont.Dispose();
+            _todayFont.Dispose();   _holidayFont.Dispose();
+            _cellPen.Dispose();
+            _selPen.Dispose();      _sunBrush.Dispose();
+            _satBrush.Dispose();    _normalBrush.Dispose();
+            _dimBrush.Dispose();    _todayBgBrush.Dispose();
+            _whiteBrush.Dispose();  _dotBrush.Dispose();
+            _selBgBrush.Dispose();
         }
         base.Dispose(disposing);
     }
